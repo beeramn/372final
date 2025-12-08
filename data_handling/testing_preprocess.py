@@ -19,7 +19,7 @@ FMAX = SR // 2
 STEM_NAMES = ["vocals", "bass", "drums", "guitar", "piano", "strings", "synth_pad"]
 
 # Base directories (relative to project root)
-DATA_ROOT = "data"
+DATA_ROOT = "../data"
 MUSDB_ROOT = os.path.join(DATA_ROOT, "musdb")
 SLAKH_ROOT = os.path.join(DATA_ROOT, "slakh")
 OUT_ROOT = os.path.join(DATA_ROOT, "processed")
