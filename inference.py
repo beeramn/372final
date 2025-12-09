@@ -1,0 +1,142 @@
+import torch
+import torchaudio
+import soundfile as sf
+import os
+from train_unet import Config
+
+from models.unet import UNet
+
+SR = 44100
+N_FFT = 1024
+HOP = 256
+WIN = 1024
+
+def load_model(checkpoint_path, device):
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    cfg = checkpoint["config"]
+    
+    model = UNet(base_channels=cfg.base_channels if hasattr(cfg, "base_channels") else 64)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.to(device)
+    model.eval()
+
+    return model
+
+
+def audio_to_mag(audio):
+    """
+    Convert time-domain audio → magnitude spectrogram.
+    """
+    stft = torch.stft(
+        audio,
+        n_fft=N_FFT,
+        hop_length=HOP,
+        win_length=WIN,
+        window=torch.hann_window(WIN),
+        return_complex=True
+    )
+    mag = torch.abs(stft)
+    phase = torch.angle(stft)
+    return mag, phase
+
+
+def magphase_to_audio(mag, phase, device="cpu"):
+    complex_stft = torch.polar(mag, phase)
+    window = torch.hann_window(WIN, device=device)
+
+    audio = torch.istft(
+        complex_stft,
+        n_fft=N_FFT,
+        hop_length=HOP,
+        win_length=WIN,
+        window=window,
+    )
+    return audio
+
+def run_chunked_inference(model, mag, chunk_size=512, overlap=128, device="cpu"):
+    """
+    mag: (1, F, T)
+    chunk_size: number of time frames per chunk
+    overlap: number of frames overlap between chunks
+    """
+    _, F, T = mag.shape
+    step = chunk_size - overlap
+
+    vocal_out = torch.zeros((1, F, T), device=device)
+    inst_out  = torch.zeros((1, F, T), device=device)
+    weight    = torch.zeros(T, device=device)
+
+    for start in range(0, T, step):
+        end = min(start + chunk_size, T)
+        mag_chunk = mag[:, :, start:end].unsqueeze(0).to(device)
+
+        with torch.no_grad():
+            mask_chunk = model(mag_chunk)  # (1, 2, F, chunk)
+            v = mask_chunk[0, 0]
+            i = mask_chunk[0, 1]
+
+        vocal_out[:, :, start:end] += v
+        inst_out[:, :, start:end]  += i
+        weight[start:end] += 1
+
+    weight = weight.clamp(min=1)
+    vocal_out /= weight
+    inst_out  /= weight
+
+    return vocal_out, inst_out
+
+def separate(model, filepath, device):
+    # Load audio (mono)
+    audio, sr = sf.read(filepath, always_2d=True)
+
+    # convert to torch tensor (C, T)
+    audio = torch.tensor(audio.T, dtype=torch.float32)
+
+    # stereo → mono
+    audio = audio.mean(dim=0, keepdim=True)
+
+    # Compute STFT
+    mag, phase = audio_to_mag(audio)
+    mag = mag.to(device)
+    phase = phase.to(device)   
+
+    # Match model input shape: (B, 1, F, T)
+    mag_in = mag.unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        vocal_mask, inst_mask = run_chunked_inference(
+        model,
+        mag_in[0],   # remove batch dim
+        chunk_size=512,  # tune this
+        overlap=128,
+        device=device
+        )
+    
+    # Apply masks
+    vocal_mag = vocal_mask * mag
+    inst_mag  = inst_mask * mag
+
+    # ISTFT reconstruction
+    vocal_audio = magphase_to_audio(vocal_mag, phase, device=device).cpu().numpy()
+    inst_audio  = magphase_to_audio(inst_mag, phase, device=device).cpu().numpy()
+
+    return vocal_audio, inst_audio
+
+
+def save_outputs(vocal, inst, out_dir="outputs"):
+    os.makedirs(out_dir, exist_ok=True)
+    sf.write(os.path.join(out_dir, "vocals.wav"), vocal.T, SR)
+    sf.write(os.path.join(out_dir, "instrumental.wav"), inst.T, SR)
+    print(f"Saved to {out_dir}/")
+
+
+if __name__ == "__main__":
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    print("Using device:", device)
+
+    checkpoint_path = "checkpoints/unet_best.pt"
+    model = load_model(checkpoint_path, device)
+
+    input_song = "mixture.wav"   # <-- CHANGE THIS
+    voc, inst = separate(model, input_song, device)
+    save_outputs(voc, inst)
