@@ -16,6 +16,10 @@ To download the dependencies using `pip`, run the following command:
 
 `pip install -r requirements.txt`
 
+Alternatively, you can run: 
+
+`pip install torch torchaudio soundfile numpy librosa tqdm matplotlib`
+
 ## Option B: Create Conda Environment
 
 To setup a conda environment, run the following commands: 
