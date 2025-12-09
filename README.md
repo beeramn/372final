@@ -1,33 +1,27 @@
-<!-- roadmap: 
+# CS372 Final Project - Audio Stem Separator
 
-gather data (basically done)
-convert tracks to spectrograms (script ready, need to debug and run on entire dataset)
-write code for unet model (todo)
-train model on balanced dataset (todo)
-test model (todo)
-make web app to host model (todo) -->
+Jason Guan and Brandon Ramirez, CS372 F25
 
-
-
-
-README.md (1 point each)
-README.md has What it Does section that describes in one paragraph what your project does - Done 
-README.md has Quick Start section that concisely explains how to run your project
-README.md has Video Links section with direct links to your demo and technical walkthrough videos
-README.md has Evaluation section that presents any quantitative results, accuracy metrics, or qualitative outcomes from testing
-README.md has Individual Contributions section for group projects that describes who did what - Done 
+## What It Does 
+The goal of this project is to build a lightweight deep-learning system that cleanly separates vocal and instrumental stems from any song, enabling musicians, creators, and audio engineers to generate high-quality stems without expensive commercial tools or studio-grade software. Our approach involves training a U-Net architecture on a custom dataset composed of existing audio collections as well as additional scraped tracks which we personally curated to broaden the model’s exposure to modern genres and improve generalizability. This tool could be especially useful for music producers who want to sample vocals for remixes or integrate them into new compositions. 
 
 ## Quick Start
-(do x and y...)
+Upon cloning this repository, you can download the dependencies by running the command: 
 
+`pip install torch torchaudio soundfile numpy librosa tqdm matplotlib`
+
+You are then able to perform track separation using our model by running the command: 
+
+`python inference.py path/to/song.wav`
+
+Please see the SETUP.md file for more information. 
 
 ## Video Links
 Demo Video: 
 Walkthrough Video: 
 
-
 ## Evaluation
-In order to assess the performance of our separation model, we applied it to a subset of the testing split of the MUSDB18 dataset and evaluated the predicted stems against the ground truth. Because MUSDB18 provides vocals, bass, drums, and “other” stems—but does not provide a standalone instrumental stem, we first merged `bass.wav`, `drums.wav`, and `other.wav` using `data/merge-tracks.py` to create a unified `instrumental.wav` target for evaluation.
+In order to assess the performance of our separation model, we applied it to a subset of testing data from the MUSDB18 dataset and evaluated the predicted stems against the ground truth. Because MUSDB18 provides vocals, bass, drums, and “other” stems—but does not provide a standalone instrumental stem, we first merged `bass.wav`, `drums.wav`, and `other.wav` using `data/merge-tracks.py` to create a unified `instrumental.wav` target for evaluation.
 
 We then used our `scoring.py` script, which performs inference on each track, caches outputs, and computes four metrics for both the predicted vocals and instrumental stems:
 
@@ -62,17 +56,12 @@ The results we gathered show that instrumental separation is generally easier th
 
 
 
-## What It Does 
-The goal of this project is to enable the extraction of vocal and instrumental stems from a single audio file. We plan to develop a webpage where users can upload an MP3 and download its isolated vocal and instrumental components. Our approach involves training a U-Net architecture on a custom dataset composed of existing audio collections as well as additional scraped tracks to broaden the model’s exposure and improve performance. This tool could be especially useful for music producers who want to sample vocals for remixes or integrate them into new compositions. This tool is especially useful for vocals to remix, or utilize in a new work.
-
-
 ## Individual Contributions 
-Jason and Brandon split evenly the data handling, model training, and model tuning 
+Although much of the work on this project was done collaboratively, Brandon focused on data curation, processing, and inference/model evaluation while Jason focused on creating the model architecture, writing the training loop, and training the model on the Duke Compute Cluster. 
 
 
 
 # Project Walkthrough
-
 
 ## Data Collection 
 An ideal dataset for this project would contain a large quantity of songs each with it's own mixture, vocals, and instrumental tracks. 
