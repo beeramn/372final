@@ -14,6 +14,12 @@ if ROOT not in sys.path:
 from processing.dataset import MUSDB2StemDataset
 from models.unet import UNet
 
+def get_device():
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 # ----------------------------
 # Config for training
@@ -21,9 +27,9 @@ from models.unet import UNet
 @dataclass
 class Config:
     data_root: str = os.path.join("data", "musdb_2stem")
-    batch_size: int = 4
-    num_workers: int = 4
-    num_epochs: int = 50
+    batch_size: int = 1
+    num_workers: int = 0
+    num_epochs: int = 20
 
     learning_rate: float = 1e-3
     weight_decay: float = 1e-5          # L2 regularization
@@ -34,7 +40,6 @@ class Config:
 
     patience: int = 7                   # early stopping patience (epochs)
     checkpoint_dir: str = "checkpoints"
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
 # ----------------------------
 # Dataloaders
@@ -43,14 +48,14 @@ def get_dataloaders(cfg: Config):
     train_ds = MUSDB2StemDataset(
         root_dir=cfg.data_root,
         split="train",
-        segment_seconds=3.0,
-        augment=True
+        segment_seconds=1.0,
+        augment=False
     )
 
     val_ds = MUSDB2StemDataset(
         root_dir=cfg.data_root,
         split="val",
-        segment_seconds=3.0,
+        segment_seconds=1.0,
         augment=False
     )
 
@@ -59,7 +64,7 @@ def get_dataloaders(cfg: Config):
         batch_size=cfg.batch_size,
         shuffle=True,
         num_workers=cfg.num_workers,
-        pin_memory=True
+        pin_memory=False
     )
 
     val_loader = DataLoader(
@@ -67,7 +72,7 @@ def get_dataloaders(cfg: Config):
         batch_size=cfg.batch_size,
         shuffle=False,
         num_workers=cfg.num_workers,
-        pin_memory=True
+        pin_memory=False
     )
 
     return train_loader, val_loader
@@ -194,14 +199,14 @@ def main():
     cfg = Config()
     os.makedirs(cfg.checkpoint_dir, exist_ok=True)
 
-    device = torch.device(cfg.device)
+    device = get_device()
     print(f"Using device: {device}")
 
     # Datasets / loaders
     train_loader, val_loader = get_dataloaders(cfg)
 
     # Model
-    model = UNet(base_channels=64, dropout=0.1).to(device)
+    model = UNet(base_channels=8, dropout=0.0).to(device)
 
     # Optimizer + scheduler
     optimizer, scheduler = get_optimizer(cfg, model)
@@ -241,6 +246,7 @@ def main():
                 {
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
+                    # remove config?
                     "config": cfg,
                     "epoch": epoch,
                     "best_val_loss": best_val_loss,

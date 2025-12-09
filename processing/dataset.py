@@ -15,7 +15,7 @@ class MUSDB2StemDataset(Dataset):
     """
 
     def __init__(self, root_dir, split="train", 
-                 segment_seconds=3.0,
+                 segment_seconds=1.0,
                  augment=False):
         super().__init__()
         self.root_dir = root_dir
@@ -49,51 +49,87 @@ class MUSDB2StemDataset(Dataset):
         track = self.tracks[idx]
         path = os.path.join(self.root_dir, track)
 
-        # -------------------------
-        # Load audio
-        # -------------------------
-        mix = load_audio(os.path.join(path, "mixture.wav"))
-        voc = load_audio(os.path.join(path, "vocals.wav"))
-        inst = load_audio(os.path.join(path, "instrumental.wav"))
+        # -------- Load precomputed STFTs --------
+        mix_mag = torch.load(os.path.join(path, "mix_mag.pt"))
+        mix_phase = torch.load(os.path.join(path, "mix_phase.pt"))
+        voc_mag = torch.load(os.path.join(path, "voc_mag.pt"))
+        inst_mag = torch.load(os.path.join(path, "inst_mag.pt"))
 
-        # Optionally apply augmentations to mixture/vocals/instrumental
-        if self.augment and self.split == "train":
-            mix = apply_augmentations(mix)
-            voc = apply_augmentations(voc)
-            inst = apply_augmentations(inst)
-
-        # -------------------------
-        # Random segment selection
-        # -------------------------
-        if mix.shape[-1] > self.segment_length:
-            start = torch.randint(0, mix.shape[-1] - self.segment_length, (1,))
-            end = start + self.segment_length
-            mix = mix[:, start:end]
-            voc = voc[:, start:end]
-            inst = inst[:, start:end]
-
-        # -------------------------
-        # STFTs
-        # -------------------------
-        mix_mag, mix_phase = stft_mag_phase(mix)
-        voc_mag, _ = stft_mag_phase(voc)
-        inst_mag, _ = stft_mag_phase(inst)
-
-        # -------------------------
-        # Spectrogram normalization
-        # -------------------------
+        # -------- Normalize --------
         mix_mag_norm, mean, std = normalize_spectrogram(mix_mag)
 
-        # -------------------------
-        # Compute ratio masks
-        # -------------------------
+        # -------- Compute ratio masks --------
         vocal_mask, inst_mask = compute_ratio_masks(voc_mag, inst_mag)
 
         return {
-            "mix_mag": mix_mag_norm,    # normalized input
+            "mix_mag": mix_mag_norm,
             "mean": mean,
             "std": std,
-            "mix_phase": mix_phase,     # required for ISTFT reconstruction
+            "mix_phase": mix_phase,
             "vocal_mask": vocal_mask,
             "inst_mask": inst_mask
         }
+
+    # def __getitem__(self, idx):
+    #     track = self.tracks[idx]
+    #     path = os.path.join(self.root_dir, track)
+
+    #     # -------------------------
+    #     # Load audio (C, T)
+    #     # -------------------------
+    #     mix = load_audio(os.path.join(path, "mixture.wav"))
+    #     voc = load_audio(os.path.join(path, "vocals.wav"))
+    #     inst = load_audio(os.path.join(path, "instrumental.wav"))
+
+    #     # -------------------------
+    #     # Augmentations
+    #     # -------------------------
+    #     if self.augment and self.split == "train":
+    #         mix = apply_augmentations(mix)
+    #         voc = apply_augmentations(voc)
+    #         inst = apply_augmentations(inst)
+
+    #     # -------------------------
+    #     # Random segment selection
+    #     # -------------------------
+    #     if mix.shape[-1] > self.segment_length:
+    #         start = torch.randint(0, mix.shape[-1] - self.segment_length, (1,))
+    #         end = start + self.segment_length
+    #         mix = mix[:, start:end]
+    #         voc = voc[:, start:end]
+    #         inst = inst[:, start:end]
+
+    #     # -------------------------
+    #     # STFT (C, F, T)
+    #     # -------------------------
+    #     mix_mag, mix_phase = stft_mag_phase(mix)
+    #     voc_mag, _         = stft_mag_phase(voc)
+    #     inst_mag, _        = stft_mag_phase(inst)
+
+    #     # -------------------------
+    #     # Normalize mixture magnitude
+    #     # -------------------------
+    #     mix_mag_norm, mean, std = normalize_spectrogram(mix_mag)
+
+    #     # -------------------------
+    #     # Compute ratio masks
+    #     # -------------------------
+    #     vocal_mask, inst_mask = compute_ratio_masks(voc_mag, inst_mag)
+
+    #     # -------------------------
+    #     # Force mono input & labels
+    #     # -------------------------
+    #     mix_mag_norm = mix_mag_norm.mean(dim=0, keepdim=True)   # (1, F, T)
+    #     mix_phase    = mix_phase.mean(dim=0, keepdim=True)      # (1, F, T)
+
+    #     vocal_mask = vocal_mask.mean(dim=0, keepdim=True)       # (1, F, T)
+    #     inst_mask  = inst_mask.mean(dim=0, keepdim=True)        # (1, F, T)
+
+    #     return {
+    #         "mix_mag": mix_mag_norm, 
+    #         "mean": mean,
+    #         "std": std,
+    #         "mix_phase": mix_phase,
+    #         "vocal_mask": vocal_mask,
+    #         "inst_mask": inst_mask
+    #     }

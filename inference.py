@@ -2,46 +2,74 @@ import torch
 import torchaudio
 import soundfile as sf
 import os
-from train_unet import Config
 
 from models.unet import UNet
+from train_unet import Config
 
+# ----------------------------
+# STFT hyperparameters
+# (must match preprocessing)
+# ----------------------------
 SR = 44100
-N_FFT = 1024
-HOP = 256
-WIN = 1024
+N_FFT = 512
+HOP = 128
+WIN = 512
 
+
+# --------------------------------------------------
+# Load trained model
+# --------------------------------------------------
 def load_model(checkpoint_path, device):
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    cfg = checkpoint["config"]
-    
-    model = UNet(base_channels=cfg.base_channels if hasattr(cfg, "base_channels") else 64)
+
+    # Create model using SAME ARCHITECTURE used in training
+    model = UNet(base_channels=8)
+
+    # IMPORTANT: Load ONLY the stored model weights
     model.load_state_dict(checkpoint["model_state_dict"])
+
     model.to(device)
     model.eval()
-
     return model
 
 
-def audio_to_mag(audio):
+# --------------------------------------------------
+# Audio → STFT magnitude + phase
+# --------------------------------------------------
+def audio_to_mag(audio, device):
     """
-    Convert time-domain audio → magnitude spectrogram.
+    audio: (1, T) mono
+    returns:
+        mag: (1, F, T)
+        phase: (1, F, T)
     """
+
+    window = torch.hann_window(WIN, device=device)
+
     stft = torch.stft(
-        audio,
+        audio.to(device),
         n_fft=N_FFT,
         hop_length=HOP,
         win_length=WIN,
-        window=torch.hann_window(WIN),
-        return_complex=True
+        window=window,
+        return_complex=True,
     )
-    mag = torch.abs(stft)
+
+    mag = stft.abs()
     phase = torch.angle(stft)
     return mag, phase
 
 
-def magphase_to_audio(mag, phase, device="cpu"):
+# --------------------------------------------------
+# ISTFT reconstruction
+# --------------------------------------------------
+def magphase_to_audio(mag, phase, device):
+    """
+    mag, phase: (1, F, T)
+    """
+
     complex_stft = torch.polar(mag, phase)
+
     window = torch.hann_window(WIN, device=device)
 
     audio = torch.istft(
@@ -53,12 +81,12 @@ def magphase_to_audio(mag, phase, device="cpu"):
     )
     return audio
 
-def run_chunked_inference(model, mag, chunk_size=512, overlap=128, device="cpu"):
-    """
-    mag: (1, F, T)
-    chunk_size: number of time frames per chunk
-    overlap: number of frames overlap between chunks
-    """
+
+# --------------------------------------------------
+# Chunked inference for long spectrograms
+# --------------------------------------------------
+def run_chunked_inference(model, mag, chunk_size=256, overlap=64, device="cpu"):
+
     _, F, T = mag.shape
     step = chunk_size - overlap
 
@@ -68,12 +96,12 @@ def run_chunked_inference(model, mag, chunk_size=512, overlap=128, device="cpu")
 
     for start in range(0, T, step):
         end = min(start + chunk_size, T)
-        mag_chunk = mag[:, :, start:end].unsqueeze(0).to(device)
+        mag_chunk = mag[:, :, start:end].unsqueeze(0).to(device)  # (1,1,F,t)
 
         with torch.no_grad():
-            mask_chunk = model(mag_chunk)  # (1, 2, F, chunk)
-            v = mask_chunk[0, 0]
-            i = mask_chunk[0, 1]
+            masks = model(mag_chunk)  # (1, 2, F, t)
+            v = masks[0, 0]
+            i = masks[0, 1]
 
         vocal_out[:, :, start:end] += v
         inst_out[:, :, start:end]  += i
@@ -85,58 +113,69 @@ def run_chunked_inference(model, mag, chunk_size=512, overlap=128, device="cpu")
 
     return vocal_out, inst_out
 
-def separate(model, filepath, device):
-    # Load audio (mono)
-    audio, sr = sf.read(filepath, always_2d=True)
 
-    # convert to torch tensor (C, T)
-    audio = torch.tensor(audio.T, dtype=torch.float32)
+# --------------------------------------------------
+# Full separation pipeline
+# --------------------------------------------------
+def separate(model, filepath, device):
+
+    # Load audio
+    audio, sr = sf.read(filepath, always_2d=True)
+    audio = torch.tensor(audio.T, dtype=torch.float32)  # (C, T)
 
     # stereo → mono
-    audio = audio.mean(dim=0, keepdim=True)
+    audio = audio.mean(dim=0, keepdim=True)  # (1, T)
 
-    # Compute STFT
-    mag, phase = audio_to_mag(audio)
-    mag = mag.to(device)
-    phase = phase.to(device)   
+    # STFT
+    mag, phase = audio_to_mag(audio, device=device)
 
-    # Match model input shape: (B, 1, F, T)
-    mag_in = mag.unsqueeze(0).to(device)
-
-    with torch.no_grad():
-        vocal_mask, inst_mask = run_chunked_inference(
+    # Run model
+    vocal_mask, inst_mask = run_chunked_inference(
         model,
-        mag_in[0],   # remove batch dim
-        chunk_size=512,  # tune this
-        overlap=128,
+        mag,  # (1, F, T)
+        chunk_size=256,
+        overlap=64,
         device=device
-        )
-    
+    )
+
     # Apply masks
     vocal_mag = vocal_mask * mag
     inst_mag  = inst_mask * mag
 
-    # ISTFT reconstruction
+    # ISTFT
     vocal_audio = magphase_to_audio(vocal_mag, phase, device=device).cpu().numpy()
     inst_audio  = magphase_to_audio(inst_mag, phase, device=device).cpu().numpy()
 
     return vocal_audio, inst_audio
 
 
+# --------------------------------------------------
+# Save WAV output
+# --------------------------------------------------
 def save_outputs(vocal, inst, out_dir="outputs"):
     os.makedirs(out_dir, exist_ok=True)
     sf.write(os.path.join(out_dir, "vocals.wav"), vocal.T, SR)
     sf.write(os.path.join(out_dir, "instrumental.wav"), inst.T, SR)
-    print(f"Saved to {out_dir}/")
+    print(f"Saved separated stems in: {out_dir}/")
 
 
+# --------------------------------------------------
+# Entry point
+# --------------------------------------------------
 if __name__ == "__main__":
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
+    device = (
+        torch.device("cuda") if torch.cuda.is_available() else
+        torch.device("mps") if torch.backends.mps.is_available() else
+        torch.device("cpu")
+    )
+
     print("Using device:", device)
 
     checkpoint_path = "checkpoints/unet_best.pt"
     model = load_model(checkpoint_path, device)
 
-    input_song = "mixture.wav"   # <-- CHANGE THIS
-    voc, inst = separate(model, input_song, device)
-    save_outputs(voc, inst)
+    input_song = "WASTE_BROCKHAMPTON.wav"  # CHANGE THIS
+    vocal, inst = separate(model, input_song, device)
+
+    save_outputs(vocal, inst)
