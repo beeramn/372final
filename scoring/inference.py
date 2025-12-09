@@ -214,7 +214,7 @@ if __name__ == "__main__":
 
     print("Using device:", device)
 
-    checkpoint_path = "checkpoints/unet_best.pt"
+    checkpoint_path = "../checkpoints/unet_best.pt"
     model = load_model(checkpoint_path, device)
 
     

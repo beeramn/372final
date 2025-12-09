@@ -27,11 +27,43 @@ Walkthrough Video:
 
 
 ## Evaluation
+In order to assess the performance of our separation model, we applied it to a subset of the testing split of the MUSDB18 dataset and evaluated the predicted stems against the ground truth. Because MUSDB18 provides vocals, bass, drums, and “other” stems—but does not provide a standalone instrumental stem, we first merged `bass.wav`, `drums.wav`, and `other.wav` using `data/merge-tracks.py` to create a unified `instrumental.wav` target for evaluation.
+
+We then used our `scoring.py` script, which performs inference on each track, caches outputs, and computes four metrics for both the predicted vocals and instrumental stems:
+
+- MSE (Mean Squared Error): Measures sample level reconstruction error
+
+- MAE (Mean Absolute Error): Measures absolute deviation between predicted and true waveforms
+
+- Mel_L1: Measures perceptual distance in mel-spectrogram space (lower is better)
+
+- SI-SDR (Scale-Invariant Signal-to-Distortion Ratio): A standard source separation metric. A higher score indicates cleaner, less contaminated separation
+
+The script computes scores on a per-song basis and then adds them to find the dataset averages. 
+
+> **Vocal Evaluation Averages** 
+- MSE       : 0.0018
+- MAE       : 0.0283
+- Mel_L1    : 16.6695
+- SI-SDR    : -1.4661
+
+> **Instrumental Evaluation Averages**
+- MSE       : 0.0019
+- MAE       : 0.0287
+- Mel_L1    : 7.9290
+- SI-SDR    : 6.8584
+
+> **Interpretation**
+
+The results we gathered show that instrumental separation is generally easier than vocal isolation. This is especially true for Unet models that are small or have been trained on limited data, like ours. While the instrumental predictions achieve an acceptable fidelity, the vocal stem separation could benefit from more improvements to the architecture or a bigger dataset and an improved loss function optimized for vocal clarity. 
+
+
+![diagram](eval.png)
 
 
 
 ## What It Does 
-The goal of this project is to enable the extraction of vocal and instrumental stems from a single audio file. We plan to develop a webpage where users can upload an MP3 and download its isolated vocal and instrumental components. Our approach involves training a U-Net architecture on a custom dataset composed of existing audio collections as well as additional scraped tracks to broaden the model’s exposure and improve performance. This tool could be especially useful for music producers who want to sample vocals for remixes or integrate them into new compositions.sampling vocals to remix, or utilize in a new work.
+The goal of this project is to enable the extraction of vocal and instrumental stems from a single audio file. We plan to develop a webpage where users can upload an MP3 and download its isolated vocal and instrumental components. Our approach involves training a U-Net architecture on a custom dataset composed of existing audio collections as well as additional scraped tracks to broaden the model’s exposure and improve performance. This tool could be especially useful for music producers who want to sample vocals for remixes or integrate them into new compositions. This tool is especially useful for vocals to remix, or utilize in a new work.
 
 
 ## Individual Contributions 
@@ -45,10 +77,10 @@ Jason and Brandon split evenly the data handling, model training, and model tuni
 ## Data Collection 
 An ideal dataset for this project would contain a large quantity of songs each with it's own mixture, vocals, and instrumental tracks. 
 We employed the MUSDB18 dataset for this purpose, however we felt that it lacked variety so we resorted to curating our own dataset. The MUSDB18
-dataset was still used in our custom data, but we added more tracks through webscrapping for more variation in types of songs. Each track in our dataset contains mixture.wav, vocals.wav, and instrumental.wav. All of these use an industry standard sampling rate of 44.1kHz, which matches the nature of our UNet architecture. After collecting all the data, the next step is to process it to server our training purposes.
+dataset was still used in our custom data, but we added more tracks through webscrapping for more variation in types of songs. Each track in our dataset contains mixture.wav, vocals.wav, and instrumental.wav. All of these use an industry standard sampling rate of 44.1kHz, which matches the nature of our UNet architecture. After collecting all the data, the next step is to process it to serve our training purposes.
 
 ## Preprocessing 
-We start our project by preparing audio data for training and evaluation. We achieve this with the first step in our pipeline, preprocessing. We use `preprocessing.py` in the `processing` folder, which, uses a set of functions designed to prepare data for a source-separation model. 
+We start our project by preparing audio data for training and evaluation. Since we start using a chunk of MUSDB18, which breaks the song down into `bass.wav`, `drums.wav`,`other.wav`, `vocals.wav`, and `mixture.wav`, we needed to get an instrumental only track. We use the `data/merge-tracks.py` script to combine the instrumental parts into `instrumental.wav`. Then we can move into the second step in our pipeline, preprocessing. We use `preprocessing.py` in the `processing` folder, which, uses a set of functions designed to prepare data for a source-separation model. 
 - `load_audio(path, sr)` loads an audio file from disk, converts it into a PyTorch tensor in channel-first format, and resamples it to the target sample rate if needed.
 
 - `stft_mag_phase(waveform)` computes the Short-Time Fourier Transform(STFT) of the input audio and returns its magnitude and phase components.
@@ -62,7 +94,7 @@ We start our project by preparing audio data for training and evaluation. We ach
 - `apply_augmentations(waveform)` applies simple data augmentations such as small pitch shifts and frequency masking to increase training diversity.
 
 ## Preparing Pytorch Dataset
-Even after processing the data, we still need to do more to properly load the data into the UNet model. The `dataset.py` file in the `processing` folder, creates a Pytorch `Dataset` class: `MUSDB2StemDataset` which is designed to load, organize, preprocess, and serve data for a !!!!!!!! TBD !!!!!!!! 2-stem source separation model(Vocals vs instrumental). The class normalizes spectrograms and their corresponding ratio masks, while keeping the dataset split, indexing, and loading consistent for both training and evaluation. 
+Even after processing the data, we still need to do more to properly load the data into the UNet model. The `dataset.py` file in the `processing` folder, creates a Pytorch `Dataset` class: `MUSDB2StemDataset` which is designed to load, organize, preprocess, and serve data for a 2-stem source separation model(Vocals vs instrumental). The class normalizes spectrograms and their corresponding ratio masks, while keeping the dataset split, indexing, and loading consistent for both training and evaluation. 
 
 At first, the class scans through the dataset folder and then sorts all the tracks and automatically divides them into train, validation, and test using splits using 70/15/15 ratio. It also stores configuration options like segment length and whether to apply data augmentation. 
 - `__getitem__` Normalizes the mixture magnitude spectrogram to stabilize learning. It computes ratio masks for vocals and instrumentals, which act as the training targets for mask-predicting models. It returns a structured dictionary containing normalized mixture features, mean/std statistics, mixture phase, and both target masks.
@@ -70,12 +102,12 @@ At first, the class scans through the dataset folder and then sorts all the trac
 
 ## UNet Model
 
-The script defines a lightweight U-Net designed to predict four output masks. Those being the left and right channels for vocals, and left and right channels for instrumentals. These predictions come from a stereo magnitude spectrogram inputs. This architecture treats the spectrogram as a 2-channel image, so it learns spatial patterns accross both frequency/time space and stereo correlations. 
+The script defines a lightweight U-Net designed to predict four output masks. Those being the left and right channels for vocals, and left and right channels for instrumentals. These predictions come from a stereo magnitude spectrogram inputs. This architecture treats the spectrogram as a 2-channel image, so it learns spatial patterns across both frequency/time space and stereo correlations. 
 
-- Encoder: Downsamples the spectrogram, captures borader context and learns abstract freatures 
+- Encoder: Downsamples the spectrogram, captures broader context and learns abstract features 
 - Bottleneck: forms the most compressed representation, contains high level global information 
 - Decoder: upsamples those features, recombines them with early encoder activations through skip connections, restores fine spectral detail
-- Final Convolution: 1x1 convolution, maps the decoded representation to four mask channels, corresponding to stereo and stero instrumentals. 
+- Final Convolution: 1x1 convolution, maps the decoded representation to four mask channels, corresponding to stereo and stereo instrumentals. 
 - Output: Sigmoid ensures the output fall between 0-1 so they behave like multiplicative soft masks.
 
 **This design intentionally uses only two downsampling levels so it can run on low-VRAM GPUs while still modeling stereo structure.**
@@ -95,7 +127,7 @@ The training script wraps the dataset class into PyTorch DataLoaders, which then
 
 > **Environmental Setup**
 - Determines available hardware with `get_device()`
-- Adds the rep. root to the `sys.path` so imports work when run as a standalone script
+- Adds the repository root to the `sys.path` so imports work when run as a standalone script
 
 > **Configuration via `config` dataclass**
 
@@ -111,7 +143,7 @@ The `Config` class stores all training hyperparameters, which include
 
 > **Creating Training + Validation Dataloaders**
 
-`get_dataloaders()` instantiates two `MUSDB2StemDataset` objects which it then wraps in PyTroch Dataloaders with 
+`get_dataloaders()` instantiates two `MUSDB2StemDataset` objects which it then wraps in PyTorch Dataloaders with 
 - shuffling for training
 - batching
 - multithreading (if enabled)
