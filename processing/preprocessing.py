@@ -1,5 +1,6 @@
 import torch
 import torchaudio
+import soundfile as sf
 import numpy as np
 import random
 
@@ -34,10 +35,13 @@ ISTFT = torchaudio.transforms.InverseSpectrogram(
 # Loading audio
 # -----------------------------
 def load_audio(path, sr=SR):
-    audio, file_sr = torchaudio.load(path)
+    audio, file_sr = sf.read(path, always_2d=True)  # shape: (T, C)
+    audio = torch.from_numpy(audio).float().transpose(0, 1)  # (C, T)
+
     if file_sr != sr:
         audio = torchaudio.functional.resample(audio, file_sr, sr)
-    return audio  # shape: (channels, time)
+
+    return audio
 
 # -----------------------------
 # STFT → magnitude + phase

@@ -1,7 +1,7 @@
 import os
 import torch
 from torch.utils.data import Dataset
-from preprocessing import (
+from processing.preprocessing import (
     load_audio, stft_mag_phase, normalize_spectrogram,
     compute_ratio_masks, apply_augmentations
 )
