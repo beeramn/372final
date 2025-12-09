@@ -11,12 +11,22 @@ class ConvBlock(nn.Module):
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(out_channels)
 
+        #let me add residual connection for same channel dimensions 
+        self.residual = (in_channels == out_channels)
+        if not self.residual:
+            self.res_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+
     def forward(self, x):
-        x = self.bn1(self.conv1(x))
-        x = F.relu(x, inplace=True)
+        residual = x
+        x = F.relu(self.bn1(self.conv1(x)))
         x = self.bn2(self.conv2(x))
-        x = F.relu(x, inplace=True)
-        return x
+        
+        if self.residual:
+            x = x + residual
+        else:
+            x = x + self.res_conv(residual)
+        
+        return F.relu(x)
 
 
 class DownBlock(nn.Module):
