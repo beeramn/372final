@@ -48,14 +48,14 @@ def get_dataloaders(cfg: Config):
     train_ds = MUSDB2StemDataset(
         root_dir=cfg.data_root,
         split="train",
-        segment_seconds=1.0,
+        segment_seconds=2.0,
         augment=False
     )
 
     val_ds = MUSDB2StemDataset(
         root_dir=cfg.data_root,
         split="val",
-        segment_seconds=1.0,
+        segment_seconds=2.0,
         augment=False
     )
 
@@ -134,16 +134,16 @@ def train_one_epoch(model, loader, optimizer, device, scaler=None, cfg: Config =
         # exit()
 
         # Convert stereo -> mono by averaging channels
-        mix_mag = mix_mag.mean(dim=1, keepdim=True)         # (B, 1, F, T)
-        vocal_mask = vocal_mask.mean(dim=1, keepdim=True)   # (B, 1, F, T)
-        inst_mask = inst_mask.mean(dim=1, keepdim=True)     # (B, 1, F, T)
+        # mix_mag = mix_mag.mean(dim=1, keepdim=True) 
+        # vocal_mask = vocal_mask.mean(dim=1, keepdim=True) 
+        # inst_mask = inst_mask.mean(dim=1, keepdim=True) 
 
-        target_masks = torch.cat([vocal_mask, inst_mask], dim=1)  # (B, 2, F, T)
+        target_masks = torch.stack([vocal_mask, inst_mask], dim=1)  # (B,2,2,F,T)
 
         optimizer.zero_grad()
 
         if cfg.use_amp and scaler is not None:
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast(device_type="cuda"):
                 pred_masks = model(mix_mag)  # (B, 2, F, T)
                 loss = criterion(pred_masks, target_masks)
             scaler.scale(loss).backward()
@@ -177,11 +177,12 @@ def eval_one_epoch(model, loader, device):
         vocal_mask = batch["vocal_mask"].to(device)
         inst_mask = batch["inst_mask"].to(device)
 
-        mix_mag = mix_mag.mean(dim=1, keepdim=True)
-        vocal_mask = vocal_mask.mean(dim=1, keepdim=True)
-        inst_mask = inst_mask.mean(dim=1, keepdim=True)
+        # mix_mag = mix_mag.mean(dim=1, keepdim=True)
+        # vocal_mask = vocal_mask.mean(dim=1, keepdim=True)
+        # inst_mask = inst_mask.mean(dim=1, keepdim=True)
 
-        target_masks = torch.cat([vocal_mask, inst_mask], dim=1)
+        # target_masks = torch.cat([vocal_mask, inst_mask], dim=1)
+        target_masks = torch.stack([vocal_mask, inst_mask], dim=1)
 
         pred_masks = model(mix_mag)
         loss = criterion(pred_masks, target_masks)
@@ -206,13 +207,13 @@ def main():
     train_loader, val_loader = get_dataloaders(cfg)
 
     # Model
-    model = UNet(base_channels=8, dropout=0.0).to(device)
+    model = UNet(base_channels=8).to(device)
 
     # Optimizer + scheduler
     optimizer, scheduler = get_optimizer(cfg, model)
 
     # Mixed precision scaler
-    scaler = torch.cuda.amp.GradScaler() if (cfg.use_amp and device.type == "cuda") else None
+    scaler = torch.amp.GradScaler() if (cfg.use_amp and device.type == "cuda") else None
 
     best_val_loss = float("inf")
     epochs_no_improve = 0

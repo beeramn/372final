@@ -13,9 +13,9 @@ import random
 
 # hyperparameters for spectrogram
 SR = 44100
-N_FFT = 1024
-HOP = 256
-WIN_LENGTH = 1024
+N_FFT = 512
+HOP = 128
+WIN_LENGTH = 512
 
 # -----------------------------
 # Loading audio
