@@ -12,9 +12,9 @@ from train_unet import Config
 # STFT hyperparameters
 # ----------------------------
 SR = 44100
-N_FFT = 1024
-HOP = 256
-WIN = 1024
+N_FFT = 512
+HOP = 128
+WIN = 512
 
 
 # --------------------------------------------------
@@ -24,7 +24,7 @@ def load_model(checkpoint_path, device):
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
     # IMPORTANT: Stereo UNet (input 2ch, output 4ch)
-    model = UNet(base_channels=32)
+    model = UNet(base_channels=8)
 
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
@@ -201,7 +201,8 @@ if __name__ == "__main__":
     checkpoint_path = "checkpoints/unet_best.pt"
     model = load_model(checkpoint_path, device)
 
-    input_song = "WASTE_BROCKHAMPTON.wav"
+    input_song = "data/musdb/Music Delta - Country1/mixture.wav"
+    # input_song = "WASTE_BROCKHAMPTON.wav"
     vocal, inst = separate(model, input_song, device)
 
     save_outputs(vocal, inst)
