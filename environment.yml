@@ -1,0 +1,16 @@
+name: unet_env
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pytorch>=2.1
+  - torchaudio>=2.1
+  - numpy
+  - librosa
+  - soundfile
+  - matplotlib
+  - pip
+  - pip:
+      - tqdm
