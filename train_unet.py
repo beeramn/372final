@@ -21,9 +21,7 @@ def get_device():
         return torch.device("mps")
     return torch.device("cpu")
 
-# ----------------------------
-# Config for training
-# ----------------------------
+# config for training
 @dataclass
 class Config:
     data_root: str = os.path.join("data", "musdb_2stem")
@@ -41,9 +39,8 @@ class Config:
     patience: int = 7                   # early stopping patience (epochs)
     checkpoint_dir: str = "checkpoints"
 
-# ----------------------------
-# Dataloaders
-# ----------------------------
+
+# dataloaders
 def get_dataloaders(cfg: Config):
     train_ds = MUSDB2StemDataset(
         root_dir=cfg.data_root,
@@ -78,9 +75,7 @@ def get_dataloaders(cfg: Config):
     return train_loader, val_loader
 
 
-# ----------------------------
-# Optimizer + Scheduler
-# ----------------------------
+# optimizer and Scheduler
 def get_optimizer(cfg: Config, model: nn.Module):
     if cfg.optimizer_name.lower() == "adam":
         opt = torch.optim.Adam(
@@ -113,9 +108,7 @@ def get_optimizer(cfg: Config, model: nn.Module):
     return opt, scheduler
 
 
-# ----------------------------
-# Training / Validation loops
-# ----------------------------
+# training and validation loops
 def train_one_epoch(model, loader, optimizer, device, scaler=None, cfg: Config = None):
 
     model.train()
@@ -193,9 +186,7 @@ def eval_one_epoch(model, loader, device):
     return avg_loss
 
 
-# ----------------------------
-# Main training driver
-# ----------------------------
+# main training driver
 def main():
     cfg = Config()
     os.makedirs(cfg.checkpoint_dir, exist_ok=True)
@@ -203,13 +194,13 @@ def main():
     device = get_device()
     print(f"Using device: {device}")
 
-    # Datasets / loaders
+    # datasets and loaders
     train_loader, val_loader = get_dataloaders(cfg)
 
-    # Model
+    # model
     model = UNet(base_channels=8).to(device)
 
-    # Optimizer + scheduler
+    # optimizer and scheduler
     optimizer, scheduler = get_optimizer(cfg, model)
 
     # Mixed precision scaler
@@ -233,15 +224,15 @@ def main():
         print(f"  Train Loss: {train_loss:.6f}")
         print(f"  Val   Loss: {val_loss:.6f}")
 
-        # Step LR scheduler based on val loss
+        # step the LR scheduler based on val loss
         scheduler.step(val_loss)
 
-        # Early stopping
+        # early stopping
         if val_loss < best_val_loss - 1e-5:
             best_val_loss = val_loss
             epochs_no_improve = 0
 
-            # Save best model
+            # save best model
             best_path = os.path.join(cfg.checkpoint_dir, "unet_best.pt")
             torch.save(
                 {
@@ -256,7 +247,7 @@ def main():
                 },
                 best_path,
             )
-            print(f"  ✅ New best model saved to {best_path}")
+            print(f" New best model saved to {best_path}")
         else:
             epochs_no_improve += 1
             print(f"  No improvement for {epochs_no_improve} epoch(s).")
@@ -278,10 +269,10 @@ def main():
 
         # Early stopping check
         if epochs_no_improve >= cfg.patience:
-            print(f"\n⏹ Early stopping triggered after {epoch} epochs.")
+            print(f" Early stopping triggered after {epoch} epochs.")
             break
 
-    print("\nTraining complete.")
+    print(" Training complete.")
 
 
 if __name__ == "__main__":

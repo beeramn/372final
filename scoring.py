@@ -13,9 +13,7 @@ import matplotlib.pyplot as plt
 from inference import load_model, separate, save_outputs, SR
 
 
-# ------------------------------------------------------------
-# AUDIO HELPERS
-# ------------------------------------------------------------
+# audio helpers
 def load_audio(path, sr=22050):
     audio, _ = librosa.load(path, sr=sr, mono=True)
     return audio
@@ -25,9 +23,7 @@ def pad_to_match(a, b):
     return a[:m], b[:m]
 
 
-# ------------------------------------------------------------
-# METRICS
-# ------------------------------------------------------------
+# metrics
 def mse(a, b):
     return np.mean((a - b) ** 2)
 
@@ -56,9 +52,8 @@ def si_sdr(reference, estimation, eps=1e-8):
     return 10 * np.log10(ratio + eps)
 
 
-# ------------------------------------------------------------
-# EVALUATION
-# ------------------------------------------------------------
+
+# evaluation
 def evaluate_pair(pred_path, true_path):
     pred = load_audio(pred_path)
     true = load_audio(true_path)
@@ -72,9 +67,7 @@ def evaluate_pair(pred_path, true_path):
     }
 
 
-# ------------------------------------------------------------
-# RUN INFERENCE + SCORING FOR A SINGLE SONG
-# ------------------------------------------------------------
+# run the inference and score for a single song
 def evaluate_song(model, song_dir):
 
     mixture_path = os.path.join(song_dir, "mixture.wav")
@@ -83,14 +76,12 @@ def evaluate_song(model, song_dir):
 
     song_name = os.path.basename(song_dir)
 
-    # Output directory for model predictions
+    # output directory for predictions made by the model
     pred_dir = os.path.join("outputs", song_name)
     pred_vocals = os.path.join(pred_dir, "vocals.wav")
     pred_inst = os.path.join(pred_dir, "instrumental.wav")
 
-    # ------------------------------------------------------------
-    # CHECK IF OUTPUT ALREADY EXISTS
-    # ------------------------------------------------------------
+    # check if the output is alr in the repository
     if os.path.exists(pred_vocals) and os.path.exists(pred_inst):
         print(f"\n=== Skipping inference for {song_name} (cached outputs found) ===")
     else:
@@ -102,9 +93,7 @@ def evaluate_song(model, song_dir):
         # Save outputs in outputs/<song_name>/
         save_outputs(vocal, inst, mixture_path)
 
-    # ------------------------------------------------------------
-    # SCORING
-    # ------------------------------------------------------------
+    # handle scoring
     vocal_scores = evaluate_pair(pred_vocals, gt_vocals_path)
     inst_scores = evaluate_pair(pred_inst, gt_inst_path)
 
@@ -128,7 +117,7 @@ def plot_scores(song_names, vocal_scores_list, inst_scores_list):
     for i, metric in enumerate(metrics):
         ax = axs[i]
 
-        # Extract numbers for each metric
+        # get numbers for each metric
         vocal_vals = [scores[metric] for scores in vocal_scores_list]
         inst_vals  = [scores[metric] for scores in inst_scores_list]
 
@@ -146,9 +135,7 @@ def plot_scores(song_names, vocal_scores_list, inst_scores_list):
     plt.show()
 
 
-# ------------------------------------------------------------
-# MAIN: RUN THROUGH WHOLE MUSDB DIRECTORY
-# ------------------------------------------------------------
+# lets go through the entire directory
 if __name__ == "__main__":
 
     musdb_root = "data/testingDB_2stem"
@@ -157,21 +144,20 @@ if __name__ == "__main__":
     device = (
         # torch.device("cuda") if torch.cuda.is_available() else
         # torch.device("mps") if torch.backends.mps.is_available() else
-        torch.device("cpu")
+        torch.device("cpu") #was timing out on my MPS, change if needed
     )
     print("Using device:", device)
 
-    # Load the model once
+    # load the model once
     model = load_model("checkpoints/unet_best.pt", device)
 
-    # Storage for average metrics
+    # store for average metrics
     all_vocal_scores = []
     all_inst_scores = []
     song_names = []
 
 
-    # Loop through all song directories
-    # Loop through all song directories
+    # loop through all song directories
     for song_name in os.listdir(musdb_root):
         song_dir = os.path.join(musdb_root, song_name)
         if not os.path.isdir(song_dir):
@@ -190,9 +176,7 @@ if __name__ == "__main__":
 
 
 
-    # ------------------------------------------------------------
-    # Compute averages
-    # ------------------------------------------------------------
+    # calculate averages
     def average_dict(list_of_dicts):
         avg = {}
         keys = list_of_dicts[0].keys()

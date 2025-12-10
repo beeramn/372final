@@ -17,14 +17,10 @@ N_FFT = 512
 HOP = 128
 WIN_LENGTH = 512
 
-# -----------------------------
-# Loading audio
-# -----------------------------
+# loading audio
+
 def load_audio(path, sr=SR):
-    """
-    Load audio from disk as (C, T) float32 tensor at the target sample rate.
-    Uses soundfile for I/O and torchaudio for resampling.
-    """
+
     audio, file_sr = sf.read(path, always_2d=True)  # shape: (T, C)
     audio = torch.from_numpy(audio).float().transpose(0, 1)  # (C, T)
 
@@ -34,17 +30,10 @@ def load_audio(path, sr=SR):
     return audio
 
 
-# -----------------------------
-# STFT → magnitude + phase
-# -----------------------------
+    #stft magnitude and phase function
+
 def stft_mag_phase(waveform: torch.Tensor):
-    """
-    Compute complex STFT and return magnitude and phase.
-    waveform: (C, T)
-    Returns:
-        mag:   (C, F, T)
-        phase: (C, F, T)
-    """
+
     # Make sure window is on the same device as the input (CPU/GPU/MPS safe)
     window = torch.hann_window(WIN_LENGTH, device=waveform.device)
 
@@ -56,25 +45,16 @@ def stft_mag_phase(waveform: torch.Tensor):
         window=window,
         return_complex=True,
         center=True,
-    )  # (C, F, T) complex
+    )  
 
     mag = spec.abs()
     phase = torch.angle(spec)
     return mag, phase
 
 
-# -----------------------------
-# Normalization
-# -----------------------------
+#normalization 
 def normalize_spectrogram(mag: torch.Tensor):
-    """
-    Normalize per-frequency-bin (channelwise).
-    mag: (C, F, T)
-    Returns:
-        mag_norm: (C, F, T)
-        mean:     (C, F, 1)
-        std:      (C, F, 1)
-    """
+
     mean = mag.mean(dim=-1, keepdim=True)
     std = mag.std(dim=-1, keepdim=True) + 1e-7
     mag_norm = (mag - mean) / std
@@ -85,40 +65,28 @@ def denormalize(mag_norm: torch.Tensor, mean: torch.Tensor, std: torch.Tensor):
     return mag_norm * std + mean
 
 
-# -----------------------------
-# Mask computation
-# -----------------------------
+# compute the mask
 def compute_ratio_masks(voc_mag: torch.Tensor, inst_mag: torch.Tensor, eps: float = 1e-8):
-    """
-    Compute soft ratio masks for vocals and instrumentals.
-    voc_mag, inst_mag: (C, F, T)
-    Returns:
-        vocal_mask, inst_mask both in [0, 1], shape (C, F, T)
-    """
+    
+    #ccompute soft ratio masks for vocals and instrumentals.
+
     mix_mag = voc_mag + inst_mag  # mixture magnitude approximation
 
     denom = mix_mag + eps
     vocal_mask = voc_mag / denom
     inst_mask = inst_mag / denom
 
-    # numerical safety: clamp to [0,1]
+    # numerical safety: bounds to [0,1]
     vocal_mask = vocal_mask.clamp(0.0, 1.0)
     inst_mask = inst_mask.clamp(0.0, 1.0)
 
     return vocal_mask, inst_mask
 
 
-# -----------------------------
-# Simple data augmentations
-# -----------------------------
-def apply_augmentations(waveform: torch.Tensor):
-    """
-    Example augmentations:
-    - small pitch shift
-    - frequency masking
+#simple data augmentation
 
-    waveform: (C, T)
-    """
+def apply_augmentations(waveform: torch.Tensor):
+
     # Pitch shift up/down up to 2 semitones
     if random.random() < 0.3:
         semitone_shift = random.uniform(-2, 2)

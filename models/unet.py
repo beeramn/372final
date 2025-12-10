@@ -2,9 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# -----------------------------------------------
 # match_size helper
-# -----------------------------------------------
 def match_size(tensor, target):
     _, _, h, w = tensor.shape
     _, _, h_t, w_t = target.shape
@@ -26,9 +24,7 @@ def match_size(tensor, target):
     return tensor
 
 
-# -----------------------------------------------
-# Conv block
-# -----------------------------------------------
+# conv block
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, dropout=0.0):
         super().__init__()
@@ -48,44 +44,13 @@ class ConvBlock(nn.Module):
         return self.block(x)
 
 
-# class ConvBlock(nn.Module):
-#     def __init__(self, in_channels, out_channels, dropout=0.0):
-#         super().__init__()
-#         self.block = nn.Sequential(
-#             nn.Conv2d(in_channels, out_channels, 3, padding=1),
-#             nn.BatchNorm2d(out_channels),
-#             nn.ReLU(inplace=True),
-#             nn.Dropout(dropout),
 
-#             nn.Conv2d(out_channels, out_channels, 3, padding=1),
-#             nn.BatchNorm2d(out_channels),
-#             nn.ReLU(inplace=True),
-#             nn.Dropout(dropout),
-#         )
-
-    # def forward(self, x):
-    #     return self.block(x)
-
-
-# ------------------------------------------------------------
-#                SUPER-LIGHTWEIGHT 2-LEVEL U-NET (STEREO)
-# ------------------------------------------------------------
 class UNet(nn.Module):
     def __init__(self, base_channels=16, dropout=0.1):
-        """
-        2-level U-Net for low-memory GPUs, now stereo-aware.
 
-        Input:
-            x: (B, 2, F, T)  # stereo magnitude spectrogram
-
-        Output:
-            masks: (B, 2, 2, F, T)
-                masks[:, 0] -> vocal masks (L/R)
-                masks[:, 1] -> instrumental masks (L/R)
-        """
         super().__init__()
 
-        # -------- Encoder --------
+        # encoder 
         # in_channels = 2 for stereo
         self.enc1 = ConvBlock(2, base_channels, dropout)
         self.pool1 = nn.MaxPool2d(2)
@@ -93,26 +58,22 @@ class UNet(nn.Module):
         self.enc2 = ConvBlock(base_channels, base_channels * 2, dropout)
         self.pool2 = nn.MaxPool2d(2)
 
-        # -------- Bottleneck --------
+        # bottleneck 
         self.bottleneck = ConvBlock(base_channels * 2, base_channels * 4, dropout)
 
-        # -------- Decoder --------
+        # decoder 
         self.up2 = nn.ConvTranspose2d(base_channels * 4, base_channels * 2, 2, stride=2)
         self.dec2 = ConvBlock(base_channels * 4, base_channels * 2, dropout)
 
         self.up1 = nn.ConvTranspose2d(base_channels * 2, base_channels, 2, stride=2)
         self.dec1 = ConvBlock(base_channels * 2, base_channels, dropout)
 
-        # -------- Output mask --------
+        # output mask 
         # 2 stems (voc/inst) * 2 channels (L/R) = 4 output channels
         self.out_conv = nn.Conv2d(base_channels, 4, kernel_size=1)
 
     def forward(self, x):
-        """
-        x: (B, 2, F, T)
-        returns:
-            masks: (B, 2, 2, F, T)
-        """
+
         # Encoder
         e1 = self.enc1(x)
         p1 = self.pool1(e1)
