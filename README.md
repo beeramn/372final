@@ -18,7 +18,7 @@ Please see the SETUP.md file for more information.
 
 ## Video Links
 Demo Video: 
-Walkthrough Video: 
+Walkthrough Video: https://www.youtube.com/watch?v=fzbgfsqr3LY
 
 ## Evaluation
 In order to assess the performance of our separation model, we applied it to a subset of testing data from the MUSDB18 dataset and evaluated the predicted stems against the ground truth. Because MUSDB18 provides vocals, bass, drums, and “other” stems—but does not provide a standalone instrumental stem, we first merged `bass.wav`, `drums.wav`, and `other.wav` using `data/merge-tracks.py` to create a unified `instrumental.wav` target for evaluation.
