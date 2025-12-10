@@ -17,7 +17,7 @@ You are then able to perform track separation using our model by running the com
 Please see the SETUP.md file for more information. 
 
 ## Video Links
-Demo Video: 
+Demo Video: https://youtu.be/vHPxi2ZNMEU       
 Walkthrough Video: https://www.youtube.com/watch?v=fzbgfsqr3LY
 
 ## Evaluation
