@@ -64,12 +64,13 @@ Although much of the work on this project was done collaboratively, Brandon focu
 # Project Walkthrough
 
 ## Data Collection 
-An ideal dataset for this project would contain a large quantity of songs each with it's own mixture, vocals, and instrumental tracks. 
-We employed the MUSDB18 dataset for this purpose, however we felt that it lacked variety so we resorted to curating our own dataset. The MUSDB18
-dataset was still used in our custom data, but we added more tracks through webscrapping for more variation in types of songs. Each track in our dataset contains mixture.wav, vocals.wav, and instrumental.wav. All of these use an industry standard sampling rate of 44.1kHz, which matches the nature of our UNet architecture. After collecting all the data, the next step is to process it to serve our training purposes.
+An ideal dataset for this project would contain a large quantity of songs with their own individual mixture, vocals, and instrumental tracks. 
+We employed the MUSDB18 dataset for this purpose, however we felt that it lacked variety so we resorted to curating our own dataset and combining our data with the MUSDB data. To do this, we added more tracks through web-scraping for more variation in the types of songs we were training on. Each track in our dataset contains the files mixture.wav, vocals.wav, and instrumental.wav. All of these use an industry standard sampling rate of 44.1kHz, which matches the nature of our UNet architecture. The data is not fully included in the repository due to size contraints; however, links to download all of the data used to train this model are available in the ATTRIBUTION.md file. 
 
 ## Preprocessing 
-We start our project by preparing audio data for training and evaluation. Since we start using a chunk of MUSDB18, which breaks the song down into `bass.wav`, `drums.wav`,`other.wav`, `vocals.wav`, and `mixture.wav`, we needed to get an instrumental only track. We use the `data/merge-tracks.py` script to combine the instrumental parts into `instrumental.wav`. Then we can move into the second step in our pipeline, preprocessing. We use `preprocessing.py` in the `processing` folder, which, uses a set of functions designed to prepare data for a source-separation model. 
+We start our pipeline by preparing audio data for training and evaluation. Since the MUSDB18 data breaks the song down into `bass.wav`, `drums.wav`,`other.wav`, `vocals.wav`, and `mixture.wav`, we needed to synthesize some of these stems to get an instrumental only track. Hence, we use the `data/merge-tracks.py` script to combine the instrumental parts into `instrumental.wav`. 
+
+We can then move into the second step in our pipeline: preprocessing. We use `preprocessing.py` in the `processing` folder, which uses a set of functions designed to prepare data for a source-separation model. 
 - `load_audio(path, sr)` loads an audio file from disk, converts it into a PyTorch tensor in channel-first format, and resamples it to the target sample rate if needed.
 
 - `stft_mag_phase(waveform)` computes the Short-Time Fourier Transform(STFT) of the input audio and returns its magnitude and phase components.
@@ -83,9 +84,9 @@ We start our project by preparing audio data for training and evaluation. Since 
 - `apply_augmentations(waveform)` applies simple data augmentations such as small pitch shifts and frequency masking to increase training diversity.
 
 ## Preparing Pytorch Dataset
-Even after processing the data, we still need to do more to properly load the data into the UNet model. The `dataset.py` file in the `processing` folder, creates a Pytorch `Dataset` class: `MUSDB2StemDataset` which is designed to load, organize, preprocess, and serve data for a 2-stem source separation model(Vocals vs instrumental). The class normalizes spectrograms and their corresponding ratio masks, while keeping the dataset split, indexing, and loading consistent for both training and evaluation. 
+Even after processing the data, we still need to do more to properly load the data into the UNet model. The `dataset.py` file in the `processing` folder creates a Pytorch `Dataset` class: `MUSDB2StemDataset`, which is designed to load, organize, preprocess, and serve data for a 2-stem source separation model (vocals vs instrumental). The class normalizes spectrograms and their corresponding ratio masks, while keeping the dataset split, indexing, and loading consistent for both training and evaluation. 
 
-At first, the class scans through the dataset folder and then sorts all the tracks and automatically divides them into train, validation, and test using splits using 70/15/15 ratio. It also stores configuration options like segment length and whether to apply data augmentation. 
+At first, the class scans through the dataset folder and then sorts all the tracks and automatically divides them into train, validation, and test using splits using a 70/15/15 ratio. It also stores configuration options like segment length and whether to apply data augmentation. 
 - `__getitem__` Normalizes the mixture magnitude spectrogram to stabilize learning. It computes ratio masks for vocals and instrumentals, which act as the training targets for mask-predicting models. It returns a structured dictionary containing normalized mixture features, mean/std statistics, mixture phase, and both target masks.
 
 
